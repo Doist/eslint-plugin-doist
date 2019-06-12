@@ -1,0 +1,20 @@
+{
+  "name": "@doist/eslint-plugin-doist",
+  "version": "0.0.1",
+  "description": "Doist eslint plugin",
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin"
+  ],
+  "author": "Doist",
+  "main": "index.js",
+  "engines": {
+    "node": ">=0.10.0"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^5.16.0",
+    "eslint-plugin-prettier": "^3.1.0"
+  }
+}
