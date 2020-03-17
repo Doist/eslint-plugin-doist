@@ -1,0 +1,77 @@
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/components/hints/ItemHint.js
+  70:12  error  "+1 completed task": Missing placeholder: "{num}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/components/hints/SectionHint.js
+  87:17  error  "+1 archived section": Missing placeholder: "{num}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/components/items_utils/ItemCommonEdits.js
+  135:17  error  "Are you sure you want to delete this task?": Missing placeholder: "{num_of_task}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/components/notifications/msg.js
+   3:4  error  "{user_1} and {user_2} and 1 other": Missing placeholder: "{n}"                @doist/doist/gettext-pluralform-placeholder
+   6:4  error  "{user} added a comment to {task}": Missing placeholder: "{n}"                 @doist/doist/gettext-pluralform-placeholder
+   8:5  error  "{multiple} added a comment to {task}": Missing placeholder: "{n}"             @doist/doist/gettext-pluralform-placeholder
+  14:5  error  "{user} added a project comment to {project}": Missing placeholder: "{n}"      @doist/doist/gettext-pluralform-placeholder
+  18:5  error  "{multiple} added a project comment to {project}": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+  24:5  error  "{user} assigned a task in {project}": Missing placeholder: "{n}"              @doist/doist/gettext-pluralform-placeholder
+  28:5  error  "{multiple} assigned a task in {project}": Missing placeholder: "{n}"          @doist/doist/gettext-pluralform-placeholder
+  34:5  error  "{user} completed a task in {project}": Missing placeholder: "{n}"             @doist/doist/gettext-pluralform-placeholder
+  38:5  error  "{multiple} completed a task in {project}": Missing placeholder: "{n}"         @doist/doist/gettext-pluralform-placeholder
+  44:5  error  "{user} uncompleted a task in {project}": Missing placeholder: "{n}"           @doist/doist/gettext-pluralform-placeholder
+  49:5  error  "{multiple} uncompleted a task in {project}": Missing placeholder: "{n}"       @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/components/notifications/Notifications.js
+  443:25  error  "{user} added a project comment to {project}": Missing placeholder: "{n}"      @doist/doist/gettext-pluralform-placeholder
+  448:25  error  "{multiple} added a project comment to {project}": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+  464:25  error  "{user} added a comment to {task}": Missing placeholder: "{n}"                 @doist/doist/gettext-pluralform-placeholder
+  469:25  error  "{multiple} added a comment to {task}": Missing placeholder: "{n}"             @doist/doist/gettext-pluralform-placeholder
+  530:25  error  "{user} assigned a task in {project}": Missing placeholder: "{n}"              @doist/doist/gettext-pluralform-placeholder
+  535:25  error  "{multiple} assigned a task in {project}": Missing placeholder: "{n}"          @doist/doist/gettext-pluralform-placeholder
+  559:25  error  "{user} completed a task in {project}": Missing placeholder: "{n}"             @doist/doist/gettext-pluralform-placeholder
+  564:25  error  "{multiple} completed a task in {project}": Missing placeholder: "{n}"         @doist/doist/gettext-pluralform-placeholder
+  590:25  error  "{user} uncompleted a task in {project}": Missing placeholder: "{n}"           @doist/doist/gettext-pluralform-placeholder
+  595:25  error  "{multiple} uncompleted a task in {project}": Missing placeholder: "{n}"       @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/components/project_editor/SectionList.js
+  523:33  error  "Archive {section} with its 1 task?": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+  558:33  error  "Delete {section} with its 1 task?": Missing placeholder: "{n}"   @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/containers/premium_promo/PremiumOnlyModal.jsx
+  158:25  error  "You’ve reached your limit of 1 collaborator per project.": Missing placeholder: "{n}"            @doist/doist/gettext-pluralform-placeholder
+  263:17  error  "You can add a maximum of 1 task per project with your current plan": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/models/LabelsModel.js
+  117:25  error  "For performance reasons you can add at most one label.": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/models/ProjectsModel.js
+  116:25  error  "For performance reasons you can add at most one project. Please archive or delete some of your finished projects.": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/react_components/item_due_tooltip/utils.js
+  12:16  error  "1 day left": Missing placeholder: "{num}"  @doist/doist/gettext-pluralform-placeholder
+  20:16  error  "1 day ago": Missing placeholder: "{num}"   @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/react_components/item_list/more_items_hint/MoreItemsHint.jsx
+  216:12  error  "+1 completed task": Missing placeholder: "{num}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/react_components/project_view/archived_sections/ArchivedSections.jsx
+  220:13  error  "+1 archived section": Missing placeholder: "{num}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/react_components/project_view/SectionHeadMenu.jsx
+  136:33  error  "Delete {section} with its 1 task?": Missing placeholder: "{n}"   @doist/doist/gettext-pluralform-placeholder
+  165:33  error  "Archive {section} with its 1 task?": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/react_components/scheduler/dueDateInput/DueDatePreview.jsx
+  69:38  error  "1 task": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/react_components/undo_toast/UndoToast.jsx
+  172:28  error  "1 task completed": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+  185:28  error  "1 task archived": Missing placeholder: "{n}"   @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/reducers/items/actions.js
+  74:5   error  "For performance reasons a task can only have one character.": Missing placeholder: "{n}"                                                                    @doist/doist/gettext-pluralform-placeholder
+  82:13  error  "For performance reasons you can add at most one task per project. Please try re-organizing your tasks into multiple projects.": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+/Users/stevenkao/workspace/Todoist/todoist/static/apps.web/reducers/sections/actions.js
+  42:21  error  "For performance reasons you can add at most one section per project.": Missing placeholder: "{n}"  @doist/doist/gettext-pluralform-placeholder
+
+✖ 42 problems (42 errors, 0 warnings)
