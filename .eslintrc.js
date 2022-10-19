@@ -1,12 +1,19 @@
-const config = {
-    env: {
-        es6: true,
-        node: true
-    },
-    plugins: ["prettier"],
-    rules: {
-        "prettier/prettier": "error"
-    }
-}
+'use strict';
 
-module.exports = config
+module.exports = {
+    root: true,
+    extends: [
+        'eslint:recommended',
+        'plugin:eslint-plugin/recommended',
+        'plugin:node/recommended',
+    ],
+    env: {
+        node: true,
+    },
+    overrides: [
+        {
+            files: ['tests/**/*.js'],
+            env: { mocha: true },
+        },
+    ],
+};

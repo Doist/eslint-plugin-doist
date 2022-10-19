@@ -1,20 +1,35 @@
 {
-  "name": "@doist/eslint-plugin-doist",
+  "name": "eslint-plugin-doist",
   "version": "0.0.1",
-  "description": "Doist eslint plugin",
+  "description": "A collection of Doist ESLint rules",
   "keywords": [
     "eslint",
     "eslintplugin",
     "eslint-plugin"
   ],
-  "author": "Doist",
-  "main": "index.js",
-  "engines": {
-    "node": ">=0.10.0"
+  "author": "Doist Frontend",
+  "main": "./lib/index.js",
+  "exports": "./lib/index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "mocha tests --recursive"
   },
-  "license": "ISC",
+  "dependencies": {
+    "requireindex": "^1.2.0"
+  },
   "devDependencies": {
-    "eslint": "^5.16.0",
-    "eslint-plugin-prettier": "^3.1.0"
-  }
+    "eslint": "^8.19.0",
+    "eslint-plugin-eslint-plugin": "^5.0.0",
+    "eslint-plugin-node": "^11.1.0",
+    "generator-eslint": "^4.0.0",
+    "mocha": "^10.0.0",
+    "yo": "^4.3.0"
+  },
+  "engines": {
+    "node": "^14.17.0 || ^16.0.0 || >= 18.0.0"
+  },
+  "peerDependencies": {
+    "eslint": ">=7"
+  },
+  "license": "ISC"
 }
