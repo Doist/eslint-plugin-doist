@@ -1,68 +1,50 @@
 # eslint-plugin-doist
 
-## Installation
+A collection of Doist ESLint rules.
 
+# Installation
+
+You'll first need to install [ESLint](https://eslint.org/):
+
+```sh
+npm i eslint --save-dev
 ```
-$ npm install @doist/eslint-plugin-doist --save-dev
+
+Next, install `eslint-plugin-doist`:
+
+```sh
+npm install eslint-plugin-doist --save-dev
 ```
 
+# Usage
 
-## Usage
+Add `doist` to the plugins section of your `.eslintrc` configuration file. You can omit the `eslint-plugin-` prefix:
 
-```js
-// Your ESLint configuration
+```json
 {
-  "plugins": [
-    // ...
-    "@doist/doist"
-  ],
-  "rules": {
-    // ...
-    "@doist/doist/static-path-literal-arg": "error",
-    "@doist/doist/gettext-literal-arg": "error"
-  }
+    "plugins": [
+        "@doist/doist"
+    ]
 }
 ```
 
-## Rules
+# Supported Rules
 
-__@doist/doist/static-path-literal-arg__
+### [gettext-literal-arg](/docs/src/gettext-literal-arg.md)
+Enforce only string literals as arguments to our i18n helpers `_()`.
 
-The argument of `$static_path` call expression needs to be a single string literal.
+### [import-file-naming](/docs/src/import-file-naming.md)
+Enforce naming conventions when importing certain file types using ES6 modules.
+### [static-path-literal-arg](/docs/src/static-path-literal-arg.md)
+Enforce only string literals as arguments to our static deployment tool `$static_path`.
 
-```js
-// good
-$static_path("/static/images/icon.png")
 
-// bad
-$static_path("/static/images" + "icon.png")
+# Add a new rule
 
-// bad
-const url = "/static/images/icon.png"
-$static_path(url)
+Use [`generator-eslint`](https://www.npmjs.com/package/generator-eslint):
+
 ```
-Why: our static deployment tool parse all code files for the `$static_path` usage in order to know which files should be uploaded to CDN. The parser cannot recognize call expression that contains non string-literal argument.
-
-
-__@doist/doist/gettext-literal-arg__
-
-The argument of `_()` call expression needs to be a single string literal.
-
-```js
-// good
-_("Thank you")
-
-// bad
-const s = "Thank you"
-_(s)
-
-// bad
-_("Thank " + "you")
+yo eslint:rule
 ```
-Why: our localization tool parse all code files to look for localized strings, and the parser cannot recognize call expression that contains non string-literal argument.
 
-
-
-
-
-
+Stick to the ESLint recomendations regarding [working with Rules](https://eslint.org/docs/latest/developer-guide/working-with-rules) and [working with plugins](https://eslint.org/docs/latest/developer-guide/working-with-plugins).
