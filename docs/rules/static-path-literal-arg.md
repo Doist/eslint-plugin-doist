@@ -1,35 +1,15 @@
 # Enforce only string literals as arguments to our static deployment tool `$static_path` (static-path-literal-arg)
 
-Please describe the origin of the rule here.
-
-## Rule Details
-
-This rule aims to...
+Our static assets deployment tool parses all code files for the `$static_path`. The parser cannot recognize call expressions containing non string-literal argument.
 
 Examples of **incorrect** code for this rule:
 
 ```js
-
-// fill me in
-
+$static_path("/static/images" + "icon.png")
 ```
 
 Examples of **correct** code for this rule:
 
 ```js
-
-// fill me in
-
+$static_path("/static/images/icon.png")
 ```
-
-### Options
-
-If there are any options, describe them here. Otherwise, delete this section.
-
-## When Not To Use It
-
-Give a short description of when it would be appropriate to turn off this rule.
-
-## Further Reading
-
-If there are other links that describe the issue this rule addresses, please include them here in a bulleted list.

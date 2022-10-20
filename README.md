@@ -30,12 +30,12 @@ Add `doist` to the plugins section of your `.eslintrc` configuration file. You c
 
 # Supported Rules
 
-### [gettext-literal-arg](/docs/src/gettext-literal-arg.md)
+### [gettext-literal-arg](./docs/rules/gettext-literal-arg.md)
 Enforce only string literals as arguments to our i18n helpers `_()`.
 
-### [import-file-naming](/docs/src/import-file-naming.md)
+### [import-file-naming](./docs/rules/import-file-naming.md)
 Enforce naming conventions when importing certain file types using ES6 modules.
-### [static-path-literal-arg](/docs/src/static-path-literal-arg.md)
+### [static-path-literal-arg](./docs/rules/static-path-literal-arg.md)
 Enforce only string literals as arguments to our static deployment tool `$static_path`.
 
 
@@ -47,4 +47,4 @@ Use [`generator-eslint`](https://www.npmjs.com/package/generator-eslint):
 yo eslint:rule
 ```
 
-Stick to the ESLint recomendations regarding [working with Rules](https://eslint.org/docs/latest/developer-guide/working-with-rules) and [working with plugins](https://eslint.org/docs/latest/developer-guide/working-with-plugins).
+Stick to the ESLint recomendations regarding [working with rules](https://eslint.org/docs/latest/developer-guide/working-with-rules) and [working with plugins](https://eslint.org/docs/latest/developer-guide/working-with-plugins).

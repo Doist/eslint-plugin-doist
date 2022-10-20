@@ -1,35 +1,34 @@
 # Enforce naming conventions when importing given file types (import-file-naming)
 
-Please describe the origin of the rule here.
-
-## Rule Details
-
-This rule aims to...
-
 Examples of **incorrect** code for this rule:
 
 ```js
-
-// fill me in
-
+/* '@doist/doist/import-file-naming': ['error', { camelcase: ['jpg'] }] */
+import LoremPhoto from './lorem-photo.png'
 ```
 
 Examples of **correct** code for this rule:
 
 ```js
-
-// fill me in
-
+/* '@doist/doist/import-file-naming': ['error', { camelcase: ['jpg'] }] */
+import loremPhoto from './lorem-photo.png'
 ```
 
-### Options
+## Options
 
-If there are any options, describe them here. Otherwise, delete this section.
+`import-file-naming` requires an options object with:
+- keys that declare a supported naming convention:
+    - `camelcase`
+    - `kebabcase`
+    - `pascalcase`
+    - `snakecase`
+- values that declare the file extensions to which the convention applies.
 
-## When Not To Use It
+For example, to enforce PascalCase on *.svg and *.mp4 imports and camelCase on *.png imports, declare:
 
-Give a short description of when it would be appropriate to turn off this rule.
-
-## Further Reading
-
-If there are other links that describe the issue this rule addresses, please include them here in a bulleted list.
+```
+'@doist/doist/import-file-naming': ['error', { 
+    pascalcase: ['svg', 'mp4'], 
+    camelcase:  ['png'],
+}]
+```
