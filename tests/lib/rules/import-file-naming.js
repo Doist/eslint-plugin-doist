@@ -17,7 +17,7 @@ const rule = require("../../../lib/rules/import-file-naming"),
 //------------------------------------------------------------------------------
 
 const ruleTester = new RuleTester({
-  parserOptions: { ecmaVersion: 2022, sourceType: "module" }
+  languageOptions: { ecmaVersion: 2022, sourceType: "module" }
 });
 ruleTester.run("import-file-naming", rule, {
   valid: [

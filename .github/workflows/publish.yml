@@ -1,33 +1,33 @@
 name: Release @doist/eslint-plugin-doist package
 
 on:
-    push:
-        tags:
-            - 'v*'
+  push:
+    tags:
+      - "v*"
 
 jobs:
-    publish:
-        runs-on: ubuntu-latest
-        timeout-minutes: 60
-        steps:
-            - uses: actions/checkout@v4
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
 
-            # Publish to GitHub package registry
-            - uses: actions/setup-node@v1
-              with:
-                  node-version: 12
-                  registry-url: https://npm.pkg.github.com/
-                  scope: '@doist'
-            - run: npm publish
-              env:
-                  NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      # Publish to GitHub package registry
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com/
+          scope: "@doist"
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
-            # Publish to npm registry
-            - uses: actions/setup-node@v1
-              with:
-                  node-version: 12
-                  registry-url: https://registry.npmjs.org/
-                  scope: '@doist'
-            - run: npm publish
-              env:
-                  NODE_AUTH_TOKEN: ${{secrets.NPM_PUBLISH_TOKEN}}
+      # Publish to npm registry
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+          scope: "@doist"
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_PUBLISH_TOKEN}}
