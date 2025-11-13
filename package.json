@@ -24,7 +24,7 @@
     "eslint-plugin-node": "^11.1.0",
     "generator-eslint": "^4.0.0",
     "mocha": "^10.0.0",
-    "yo": "^4.3.0"
+    "yo": "^6.0.0"
   },
   "engines": {
     "node": "^22.14.0 || >= 24.10.0",
