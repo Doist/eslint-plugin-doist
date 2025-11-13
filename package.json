@@ -1,6 +1,6 @@
 {
   "name": "@doist/eslint-plugin-doist",
-  "version": "1.0.1",
+  "version": "2.0.0-beta3",
   "description": "A collection of Doist ESLint rules",
   "repository": "https://github.com/Doist/eslint-plugin-doist",
   "keywords": [
