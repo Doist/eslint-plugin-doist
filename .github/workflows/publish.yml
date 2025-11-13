@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   # Enable reading repository contents (allows checkout without token)
@@ -30,23 +29,13 @@ jobs:
       - name: Ensure npm 11.5.1 or later is installed
         run: npm install -g npm@latest
 
-      - name: Determine npm tag
-        id: npm-tag
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" =~ -alpha|-beta|-rc|-next ]]; then
-            echo "tag=beta" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          fi
-
       - name: Publish to GitHub Package Registry
         uses: actions/setup-node@v3
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com/
           scope: "@doist"
-      - run: npm publish --tag ${{ steps.npm-tag.outputs.tag }}
+      - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -59,4 +48,4 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org/
           scope: "@doist"
-      - run: npm publish --provenance --access public --tag ${{ steps.npm-tag.outputs.tag }}
+      - run: npm publish --provenance --access public
