@@ -11,6 +11,11 @@ on:
         type: choice
         options: [pack, npm, github, both]
         default: pack
+      dist_tag:
+        description: Use recovery for an older missing mirror without changing latest
+        type: choice
+        options: [latest, recovery]
+        default: latest
       artifact_run_id:
         description: Original successful pack run ID; required for publication/retry
         type: string
@@ -25,7 +30,7 @@ concurrency:
 
 jobs:
   pack:
-    if: github.event_name == 'push' || inputs.operation == 'pack'
+    if: (github.event_name == 'push' || inputs.operation == 'pack') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -75,15 +80,20 @@ jobs:
           test "$GITHUB_REF" = "refs/tags/v$(node -p "require('./package.json').version")"
           [[ "$ARTIFACT_RUN_ID" =~ ^[0-9]+$ ]]
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID" > "$RUNNER_TEMP/source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...main" > "$RUNNER_TEMP/main-ancestry.json"
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           import { readFileSync } from 'node:fs';
           const run = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/source-run.json`));
           assert.equal(run.repository.full_name, process.env.GITHUB_REPOSITORY);
+          assert.equal(run.head_repository.full_name, process.env.GITHUB_REPOSITORY);
+          assert(['main', process.env.GITHUB_REF_NAME].includes(run.head_branch));
           assert.equal(run.path, '.github/workflows/publish.yml');
           assert.equal(run.head_sha, process.env.GITHUB_SHA);
           assert.equal(run.conclusion, 'success');
           assert(['push', 'workflow_dispatch'].includes(run.event));
+          const ancestry = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/main-ancestry.json`));
+          assert(['ahead', 'identical'].includes(ancestry.status), 'Artifact commit must be on reviewed main history');
           JS
       - uses: actions/download-artifact@v4
         with:
@@ -94,6 +104,8 @@ jobs:
       - name: Verify retained artifact
         run: node .github/scripts/release.mjs verify "$RUNNER_TEMP/release-artifacts"
       - name: Publish or verify npm artifact
+        env:
+          RELEASE_DIST_TAG: ${{ inputs.dist_tag }}
         if: inputs.operation == 'npm' || inputs.operation == 'both'
         run: node .github/scripts/release.mjs publish "$RUNNER_TEMP/release-artifacts" npm
       - name: Publish or verify GitHub mirror
@@ -101,3 +113,4 @@ jobs:
         run: node .github/scripts/release.mjs publish "$RUNNER_TEMP/release-artifacts" github
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_DIST_TAG: ${{ inputs.dist_tag }}

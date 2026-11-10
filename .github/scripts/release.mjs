@@ -60,6 +60,8 @@ if (mode === 'publish') {
     assert(['npm', 'github'].includes(destination), 'Choose npm or github explicitly');
     assert.equal(process.env.GITHUB_REPOSITORY, 'todoist/eslint-plugin-doist', 'Publish only from the renamed repository');
     assert.equal(process.env.GITHUB_REF, `refs/tags/v${source.version}`, 'Publish only from the matching version tag');
+    const distTag = process.env.RELEASE_DIST_TAG || 'latest';
+    assert(['latest', 'recovery'].includes(distTag), 'Use latest or the explicit recovery dist-tag');
     const registry = destination === 'npm' ? 'https://registry.npmjs.org/' : 'https://npm.pkg.github.com/';
     const staging = mkdtempSync(join(tmpdir(), 'eslint-plugin-publish-'));
     try {
@@ -81,7 +83,7 @@ if (mode === 'publish') {
         env.NPM_CONFIG_GLOBALCONFIG = globalConfig;
         const options = { cwd: staging, env, encoding: 'utf8' };
         const spec = `${source.name}@${source.version}`;
-        function existing() {
+        const existing = () => {
             const result = spawnSync('npm', ['view', spec, 'dist', '--json', `--registry=${registry}`], options);
             if (result.status !== 0) {
                 let error;
@@ -93,8 +95,8 @@ if (mode === 'publish') {
             if (dist.integrity) assert.equal(dist.integrity, metadata.integrity, 'Existing registry artifact differs');
             else assert.equal(dist.shasum, metadata.shasum, 'Existing registry artifact differs');
             return true;
-        }
-        function checkLatest() {
+        };
+        const checkLatest = () => {
             const result = spawnSync('npm', ['view', source.name, 'dist-tags', '--json', `--registry=${registry}`], options);
             if (result.status !== 0) {
                 let error;
@@ -110,13 +112,13 @@ if (mode === 'publish') {
             const differing = current.findIndex((value, index) => value !== target[index]);
             assert(differing === -1 || current[differing] < target[differing],
                 `Refusing to move latest backwards from ${latest}; retain this artifact and use a reviewed recovery tag`);
-        }
+        };
         if (existing()) {
             console.log(`${spec} already matches on ${destination}; no publication or dist-tag changes`);
         } else {
-            checkLatest();
-            const args = ['publish', tarball, '--ignore-scripts', '--tag=latest', `--registry=${registry}`];
-            if (destination === 'npm') args.push('--access=public', '--provenance');
+            if (distTag === 'latest') checkLatest();
+            const args = ['publish', tarball, '--ignore-scripts', `--tag=${distTag}`, `--registry=${registry}`];
+            if (destination === 'npm') args.push('--access=public', '--provenance=false');
             execFileSync('npm', args, { ...options, stdio: 'inherit' });
             assert(existing(), 'Published version was not returned by the registry; retry the retained artifact');
         }

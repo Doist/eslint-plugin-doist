@@ -8,31 +8,32 @@ before a maintainer creates the next tag. Do not bump again to repair a missing
 mirror. Existing packages, releases and tags remain untouched.
 
 This is an M02 leaf producer: `requireindex` is the only runtime dependency,
-`eslint >=9` is a peer, and there are no scoped build dependencies or compilation
-steps. The same tarball must reach npmjs (public) and GitHub Packages (currently
-public; preserve visibility separately from npm's access flag).
+`eslint ^8.57.0 || ^9.0.0` is a peer, and there are no Doist/Todoist build
+dependencies or compilation steps. The `@eslint/*` adapters are public development
+tools used only for repository lint verification. The same tarball must reach
+npmjs (public) and GitHub Packages (currently public; preserve visibility separately from npm's access flag).
 
 ## Preparation and merge gates
 
 Migration preparation does not publish, dispatch workflows, create tags, change
 settings, or rehearse the cutover. Branch pushes, draft PRs and a main-branch merge
-do not invoke this repository's release workflow. After this change, a **new
-version tag only packs**; publication requires an explicit dispatch.
+do not invoke this repository's release workflow. PRs and main pushes run only
+the read-only test/lint matrix (dependency installs disable lifecycle scripts).
+After this change, a **new version tag only packs**; publication requires an explicit dispatch.
 
-Before release, resolve the existing verification debt on the current line:
+The migration repairs the current-line lockfile drift and test/lint harness so
+ESLint 8.57 and 9 can be verified without changing runtime rule implementation.
+`eslint.config.cjs` adapts the existing lint policy, including the legacy Node
+lint plugin, using ESLint's official compatibility helpers. `RuleTester` uses the
+matching configuration shape for each major. The behavior suite additionally runs
+all three rules, plural/context gettext arguments and both static-path arguments
+through flat and eslintrc APIs with the new scope.
 
-- The base manifest requires ESLint 9 / eslint-plugin-eslint-plugin 6, but its
-  lockfile contains ESLint 8.25.0 / eslint-plugin-eslint-plugin 5.0.6. The migration
-  changes only root name/version metadata, so `npm ci --ignore-scripts` is still
-  blocked. Repair the development lockfile through a reviewed forward change.
-- `npm run lint` uses a legacy `.eslintrc.js`; ESLint 9 defaults to flat config.
-- The rule tests use legacy `parserOptions`. Resolve the test harness compatibility
-  with ESLint 9 and run the rule tests before approving publication. Direct flat-config
-  probes of all three rules (including invalid literal-helper inputs) pass with ESLint
-  9.9.0; the older positional `context.report` call still works in that version.
-
-The pack-only route deliberately needs no development install; obtaining an
-artifact does **not** prove that the checks or consumer compatibility passed.
+Run `npm ci --ignore-scripts --no-audit --no-fund`, `npm run lint` and `npm test`.
+The CI matrix in `.github/workflows/test.yml` covers ESLint 8.57.0, 9.0.0 and latest
+9 on Node 22.14.0 and 24.10.0. Each job installs the tested ESLint without saving a
+manifest/lockfile change. The release pack step needs no development install;
+publication approval still requires the matrix and the normal code review.
 
 ## Artifact production (future authorized operator)
 
@@ -117,7 +118,9 @@ require appropriate authentication even when the package is public.
 Near the next real automated release, configure npm Settings → Trusted publishing:
 owner `todoist`, repository `eslint-plugin-doist`, filename `publish.yml`,
 environment **blank**. Enable direct `npm publish`. The job grants `id-token:write`
-and uses a hosted runner; it adds public npm provenance. No `npm dist-tag` commands
+and uses a hosted runner. Publication passes `--provenance=false`, including for
+OIDC, because this is a retained artifact from an earlier run; it does not claim
+that the publication job built that tarball. No `npm dist-tag` commands
 are used, so a separate dist-tag-management grant is not required. A manual first
 release does not validate this connection. Record it as configured/unverified
 until the next real publish succeeds; new connections expire after two days
@@ -126,16 +129,28 @@ without a successful publication.
 For a later stable release, update the manifest/root lock versions through review,
 create its matching tag, retain the pack result, then dispatch `operation=both`
 on that tag with the original `artifact_run_id`. For a partial release, choose
-`npm` or `github` for the missing destination. The script verifies the source run,
-commit, package identity and digest before publishing. If the exact version
+`npm` or `github` for the missing destination. The workflow requires a successful
+`publish.yml` pack run from this repository
+(not a fork or PR event), on `main` or the matching version tag, with the exact
+checked-out SHA. A GitHub comparison must confirm that commit belongs to reviewed
+`main` history. The script then verifies package identity and digest before
+publishing. If the exact version
 already exists it must have matching integrity (or matching SHA-1 where the
 registry does not return integrity); a mismatch stops the job. Authentication or
 other read errors stop the job; only E404 permits a publication attempt. A skipped
 existing version does not move its dist-tags. Before a missing-version publish,
 the job refuses to move an existing newer `latest` backwards; a non-stable `latest`
 also requires a maintainer decision. In those cases, retain the same artifact and
-complete the mirror with a separately reviewed recovery dist-tag, preserving the
-newer `latest`. Do not create a new version to bypass the guard. Workflow runs
+dispatch the same artifact with the explicit `dist_tag=recovery` choice, preserving
+`latest`. For example:
+
+```sh
+gh workflow run publish.yml --repo todoist/eslint-plugin-doist --ref v2.0.2 \
+  -f operation=github -f artifact_run_id="$RUN_ID" -f dist_tag=recovery
+```
+
+The recovery tag is an explicit operator choice; inspect it before reusing it.
+Do not create a new version to bypass the guard. Workflow runs
 are serialized for the whole package, across version tags. Coordinate external
 maintainer publications with this queue so the latest check remains valid.
 
@@ -152,11 +167,16 @@ packages in that scope. There is no registry fallback.
 
 ## eslint-config consumer handoff
 
-The current `@doist/eslint-config@13.1.1` pins plugin `1.0.0`; adopting 2.0.2 also
-adopts the existing 2.x engine/peer contract. Its dev ESLint 8.57.0 and advertised
-`^8.57.0 || ^9.0.0` support conflict with plugin `eslint >=9`. Resolve that policy
-explicitly on the current config line; do not use `--force`/`--legacy-peer-deps`
-as evidence of compatibility or rebuild a historical plugin line.
+The current `@doist/eslint-config@13.1.1` pins plugin `1.0.0`. Its existing
+ESLint `^8.57.0 || ^9.0.0` support is now also the forward plugin 2.0.2 peer policy,
+verified against both engines with no historical rebuild or runtime rule changes.
+The old producer 2.0.1's `eslint >=9` restriction is broadened only after this
+compatibility validation. The config worker can adopt the intended exact 2.0.2
+once real publication permits normal lockfile regeneration and registry checks.
+
+Keep the producer's existing engines: Node `^22.14.0 || >=24.10.0` and npm
+`^10.9.2 || >=11.5.1`. The config's Node `>=24` contract intersects this at 24.10.0;
+its worker must document/enforce that inherited floor rather than lower it silently.
 
 The plugin's CommonJS root entry/exports remains `./lib/index.js`; it exports
 `rules` only (gettext-literal-arg, static-path-literal-arg, import-file-naming),
@@ -165,8 +185,9 @@ this migration. `flat/recommended.js` in the config imports the root and registe
 `@doist/doist`; migrate both that import and plugin/rule keys to `@todoist/doist`.
 `eslintrc/recommended.js` uses the same scoped shorthand and all three rule names.
 An old alias may be deliberately retained by a flat-config consumer, but legacy
-plugin resolution needs the new package scope. Literal-helper invalid inputs need
-real ESLint 9 behavior verification, not just an import smoke check.
+plugin resolution needs the new package scope. The matrix verifies invalid
+literal-helper inputs and file-naming diagnostics
+through both configuration formats, rather than only testing import resolution.
 
 ## Setup references
 

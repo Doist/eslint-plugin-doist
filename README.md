@@ -7,7 +7,7 @@ A collection of Doist ESLint rules.
 You'll first need to install [ESLint](https://eslint.org/):
 
 ```sh
-npm i eslint --save-dev
+npm i eslint@^9 --save-dev
 ```
 
 Next, install `@todoist/eslint-plugin-doist` (the package basename stays unchanged):
@@ -18,7 +18,7 @@ npm install @todoist/eslint-plugin-doist --save-dev
 
 # Usage
 
-The current 2.x line requires ESLint 9 and the Node/npm versions in `package.json`.
+Version 2.0.2 supports ESLint `^8.57.0 || ^9.0.0` and the Node/npm versions in `package.json`.
 Register the plugin in `eslint.config.cjs`:
 
 ```js
