@@ -16,6 +16,10 @@ on:
         type: choice
         options: [latest, recovery]
         default: latest
+      artifact_id:
+        description: Immutable artifact ID from the original upload; required for publication/retry
+        type: string
+        default: ''
       artifact_run_id:
         description: Original successful pack run ID; required for publication/retry
         type: string
@@ -30,7 +34,8 @@ concurrency:
 
 jobs:
   pack:
-    if: (github.event_name == 'push' || inputs.operation == 'pack') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    # Retained releases are produced only on attempt 1. Reruns must not repack.
+    if: github.run_attempt == 1 && (github.event_name == 'push' || inputs.operation == 'pack') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -57,6 +62,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.operation != 'pack'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+      ARTIFACT_ID: ${{ inputs.artifact_id }}
     permissions:
       contents: read
       actions: read
@@ -71,37 +80,11 @@ jobs:
           node-version: 24
       - name: Pin npm with trusted-publishing support
         run: npm install --global npm@11.19.0 --ignore-scripts
-      - name: Validate source run and version tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+      - name: Fetch and authenticate original attempt archive
         run: |
           test "$GITHUB_REPOSITORY" = todoist/eslint-plugin-doist
           test "$GITHUB_REF" = "refs/tags/v$(node -p "require('./package.json').version")"
-          [[ "$ARTIFACT_RUN_ID" =~ ^[0-9]+$ ]]
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID" > "$RUNNER_TEMP/source-run.json"
-          gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...main" > "$RUNNER_TEMP/main-ancestry.json"
-          node --input-type=module <<'JS'
-          import assert from 'node:assert/strict';
-          import { readFileSync } from 'node:fs';
-          const run = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/source-run.json`));
-          assert.equal(run.repository.full_name, process.env.GITHUB_REPOSITORY);
-          assert.equal(run.head_repository.full_name, process.env.GITHUB_REPOSITORY);
-          assert(['main', process.env.GITHUB_REF_NAME].includes(run.head_branch) ||
-            (run.event === 'push' && run.head_branch === null));
-          assert.equal(run.path, '.github/workflows/publish.yml');
-          assert.equal(run.head_sha, process.env.GITHUB_SHA);
-          assert.equal(run.conclusion, 'success');
-          assert(['push', 'workflow_dispatch'].includes(run.event));
-          const ancestry = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/main-ancestry.json`));
-          assert(['ahead', 'identical'].includes(ancestry.status), 'Artifact commit must be on reviewed main history');
-          JS
-      - uses: actions/download-artifact@v4
-        with:
-          name: eslint-plugin-doist-release
-          path: ${{ runner.temp }}/release-artifacts/
-          run-id: ${{ inputs.artifact_run_id }}
-          github-token: ${{ github.token }}
+          node .github/scripts/release.mjs fetch "$RUNNER_TEMP/release-artifacts"
       - name: Verify retained artifact
         run: node .github/scripts/release.mjs verify "$RUNNER_TEMP/release-artifacts"
       - name: Publish or verify npm artifact

@@ -45,30 +45,49 @@ so M01 shared-action pins are not a build prerequisite here.
 After rename/access and human review, use the normal version-tag process on the
 reviewed release commit. The `v2.0.2` push runs `pack`. Alternatively, dispatch
 `operation=pack` on the reviewed ref. Neither route publishes. Record the run ID
-and full commit SHA. This package has no build; the job executes exactly once:
+and full commit SHA, plus the immutable artifact ID shown by `upload-artifact`.
+Only attempt **1** may pack (workflow and script enforce this); a failed original
+attempt cannot be replaced by rerunning it. This package has no build:
 
 ```sh
 node .github/scripts/release.mjs pack "$RUNNER_TEMP/release-artifacts"
 ```
 
 The `eslint-plugin-doist-release` artifact contains
-`todoist-eslint-plugin-doist-2.0.2.tgz`, `release.json` (commit and SHA-256/SHA-512/
-SHA-1), and `SHA256SUMS`. It is retained for 90 days, subject to organization
-retention limits. Archive these exact files in the approved release store before
-expiry. Never rerun the pack job to complete a partial publication. The pack
-script refuses an existing output directory.
+`todoist-eslint-plugin-doist-2.0.2.tgz`, `release.json` (schema 1, commit and
+SHA-256/SHA-512/SHA-1), and `SHA256SUMS`. It is retained for 90 days, subject to
+organization retention limits. Archive the **original ZIP**, all three files,
+run ID, attempt 1, artifact ID, API archive digest and source SHA before expiry.
+Never rerun the pack job to complete a partial publication. The pack script
+refuses an existing output directory.
 
-Download the original successful pack run into a fresh directory, using the real
-run ID for `RUN_ID`; keep the repository checked out at that reviewed commit:
+Use an existing GitHub CLI login with repository **Actions: read** and
+**Contents: read** access (fine-grained token or app), or a classic token with
+`repo` for private repository access. Required SSO authorization still applies.
+This source API credential is distinct from the classic Packages read token
+below. The workflow provides `GH_TOKEN=github.token` with the equivalent read
+permissions. No credentials/settings are created during preparation.
+
+From the checkout at the exact reviewed source commit, set the real original
+IDs (obtain the artifact ID from its upload output; never guess it). `fetch`
+validates the original successful attempt, pack job and reviewed main ancestry,
+then downloads the exact artifact ID and verifies its API SHA-256 ZIP digest:
 
 ```sh
-RELEASE_DIR=$(mktemp -d)
-gh run download "$RUN_ID" --repo todoist/eslint-plugin-doist \
-  --name eslint-plugin-doist-release --dir "$RELEASE_DIR"
+export ARTIFACT_RUN_ID="$RUN_ID" ARTIFACT_ID="$ORIGINAL_ARTIFACT_ID"
+RELEASE_DIR="$(mktemp -d)/release"
+export RELEASE_DIR
+node .github/scripts/release.mjs fetch "$RELEASE_DIR"
 node .github/scripts/release.mjs verify "$RELEASE_DIR"
 (cd "$RELEASE_DIR" && shasum -a 256 -c SHA256SUMS)
 tar -xOf "$RELEASE_DIR/todoist-eslint-plugin-doist-2.0.2.tgz" package/package.json
 ```
+
+The fetch destination must not already exist. It retains `source-artifact.zip`
+alongside the three release files. `verify` alone is a local consistency check;
+it does **not** authorize publication. Both `bootstrap` and `publish` independently
+read the authoritative original-attempt/artifact APIs and compare every selected
+local entry with that archive before reaching any registry write.
 
 Review the packed identity, dependencies and public classification. The verifier
 rejects a private marker or any `publishConfig`, and compares metadata to the
@@ -89,18 +108,26 @@ The operator must have an existing **GitHub personal access token (classic)**
 with `read:packages`, held by an account with Read access to the intended mirror
 and authorized for the organization's SSO if required. A valid token without the
 package's access grant is insufficient. Before interpreting a 404 as absence,
-the package administrator must confirm those intended read permissions (or that
-the package truly does not yet exist). Do not treat an inaccessible private
-mirror as missing. Do not create tokens/change ACLs as a preparation check.
+the helper requires the known transferred mirror's actual GitHub npm registry
+package document and nonempty, valid dist-tags to be readable. Root 404, malformed
+metadata or auth/network ambiguity stops even an npm-only bootstrap/retry before
+login/write. REST visibility, `npm whoami` and an administrator statement do not
+bypass this executable gate. If the transferred mirror is not readable, its
+existing owner must restore the intended package access/routing before retrying.
+There is no first-mirror absence bypass. Do not create tokens/change ACLs as a preparation check.
 
 From the checkout at the selected artifact's exact reviewed source commit, with
-`RELEASE_DIR` pointing to the downloaded original artifact, use this Bash block.
+`RELEASE_DIR` pointing to the authenticated original artifact and
+`ARTIFACT_RUN_ID`/`ARTIFACT_ID` exported, use this Bash block. An existing GitHub
+CLI login must already have the Actions/Contents read access described above;
+if using `GH_TOKEN` instead, supply that existing source-read credential through
+your approved secret environment (not shell history).
 It reads the existing GitHub credential without echoing it or putting it into
 shell history. These are **future authorized operator commands**, not checks run
 during preparation:
 
 ```sh
-export RELEASE_DIR
+export RELEASE_DIR ARTIFACT_RUN_ID ARTIFACT_ID
 bash <<'BASH'
 read -r -s -p 'Existing GitHub Packages read token: ' NODE_AUTH_TOKEN </dev/tty
 printf '\n'
@@ -131,7 +158,7 @@ must point to the artifact's commit):
 
 ```sh
 gh workflow run publish.yml --repo todoist/eslint-plugin-doist --ref v2.0.2 \
-  -f operation=github -f artifact_run_id="$RUN_ID"
+  -f operation=github -f artifact_run_id="$ARTIFACT_RUN_ID" -f artifact_id="$ARTIFACT_ID"
 ```
 
 GitHub publication uses `GITHUB_TOKEN` with `packages:write` (including Read).
@@ -156,20 +183,28 @@ without a successful publication.
 
 For a later stable release, update the manifest/root lock versions through review,
 create its matching tag, retain the pack result, then dispatch `operation=both`
-on that tag with the original `artifact_run_id`. For a partial release, choose
-`npm` or `github` for the missing destination. The workflow requires a successful
-`publish.yml` pack run from this repository
+on that tag with the original `artifact_run_id` and `artifact_id`. For a partial release, choose
+`npm` or `github` for the missing destination. The workflow and local bootstrap require a successful
+original **attempt 1** of a `publish.yml` pack run from this repository
 (not a fork or PR event), on `main` or the matching version tag, with the exact
 checked-out SHA. A GitHub comparison must confirm that commit belongs to reviewed
-`main` history. The script then verifies package identity and digest before
-publishing. Before **each** registry write, even a one-mirror retry, both exact
+`main` history. The attempt API, not the mutable latest run state, is used; a
+later failed/skipped rerun does not invalidate the original artifact. The artifact
+must have the exact selected ID, run/repository/source SHA and a creation time
+within the successful original pack job. Its API SHA-256 must match the retained
+ZIP, and every local file must equal its ZIP entry. No comparison with evolving
+current-main workflow bytes is required. Schema 1 is supported; unsupported
+schema or unavailable authoritative evidence stops with original-artifact
+recovery required, never a request to repack an immutable published version.
+The script also verifies package identity and tarball digests before publishing. Before **each** registry write, even a one-mirror retry, both exact
 same-version copies must be absent or match the selected artifact. Choosing a
 different valid pack run for the same version never permits divergence from an
 already-published opposite copy. Existing copies must have matching integrity (or matching SHA-1 where the
 registry does not return integrity); a mismatch stops the job. Authentication or
 other read errors stop the job. Structured E404 from either output stream, or
-npm's explicit E404 error code, permits absence only with the intended registry
-read permissions; conflicting/unclassified errors fail closed. A skipped
+npm's explicit E404 error code, permits exact-version absence only after the
+GitHub registry package document/dist-tags read succeeds; root 404 and
+conflicting/unclassified errors fail closed. A skipped
 existing version does not move its dist-tags. Before a missing-version publish,
 the job refuses to move an existing newer `latest` backwards; a non-stable `latest`
 also requires a maintainer decision. In those cases, retain the same artifact and
@@ -178,7 +213,7 @@ dispatch the same artifact with the explicit `dist_tag=recovery` choice, preserv
 
 ```sh
 gh workflow run publish.yml --repo todoist/eslint-plugin-doist --ref v2.0.2 \
-  -f operation=github -f artifact_run_id="$RUN_ID" -f dist_tag=recovery
+  -f operation=github -f artifact_run_id="$ARTIFACT_RUN_ID" -f artifact_id="$ARTIFACT_ID" -f dist_tag=recovery
 ```
 
 The recovery tag is an explicit operator choice; inspect it before reusing it.
@@ -186,11 +221,15 @@ Do not create a new version to bypass the guard. Workflow runs
 are serialized for the whole package, across version tags. Coordinate external
 maintainer publications with this queue so the latest check remains valid.
 
-If an artifact expires, use the archived original tarball and checksum with an
-authorized maintainer's registry-specific credentials and the same both-registry
-preflight helper in an isolated directory; never bypass it with a raw publish.
-Do not rebuild, rerun version calculation, change versions, or overwrite releases.
-If no exact retained artifact is available, stop and recover it before retrying.
+For recovery, keep the original `source-artifact.zip` beside its unmodified
+entries and reuse the exact run/artifact IDs with the same guarded helper and
+credentials. A local ZIP backup avoids redownloading an expired archive **only
+while GitHub still provides the original attempt/jobs/artifact metadata and
+API digest**. If that authoritative evidence has also disappeared, stop for
+owner-assisted recovery of the original evidence; local self-declared hashes
+cannot authorize publication. Never manufacture an archive or bypass the guard
+with raw `npm publish`. Do not rebuild, rerun version calculation, change versions,
+or overwrite releases.
 
 Check both registry `dist` values against `release.json`, inspect `latest`, and
 perform actual installs using the consumer's intended routing/credentials before
@@ -228,6 +267,8 @@ through both configuration formats, rather than only testing import resolution.
 - Workflow: <https://github.com/todoist/eslint-plugin-doist/actions/workflows/publish.yml>
 - npm package settings: <https://www.npmjs.com/package/@todoist/eslint-plugin-doist/access>
 - GitHub package settings: <https://github.com/orgs/todoist/packages/npm/eslint-plugin-doist/settings>
+- [GitHub original run attempt API](https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run-attempt)
+- [GitHub artifact identity/digest API](https://docs.github.com/en/rest/actions/artifacts#get-an-artifact)
 - [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
 - [npm trust prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-trust/)
 - [GitHub npm registry authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry)

@@ -12,7 +12,7 @@ const different = { integrity: 'sha512-different-pack-same-version' };
 const success = (value) => ({ status: 0, stdout: JSON.stringify(value), stderr: '' });
 const missing = () => ({ status: 1, stdout: JSON.stringify({ error: { code: 'E404' } }), stderr: '' });
 
-function registryFixture(initial, { latest = '2.0.1', fail, onLogin } = {}) {
+function registryFixture(initial, { latest = '2.0.1', fail, onLogin, githubDocument } = {}) {
     const copies = { ...initial };
     const calls = [];
     const registry = (destination, callback) => callback((args, options = {}) => {
@@ -28,6 +28,7 @@ function registryFixture(initial, { latest = '2.0.1', fail, onLogin } = {}) {
         }
         assert.equal(args[0], 'view');
         if (fail?.destination === destination) return fail.result;
+        if (args[2] === 'name') return githubDocument || success({ name: release.name, 'dist-tags': { latest } });
         if (args[2] === 'dist-tags') return success({ latest });
         assert.equal(args[1], `${release.name}@${release.version}`);
         return copies[destination] ? success(copies[destination]) : missing();
@@ -51,8 +52,8 @@ for (const destination of ['npm', 'github']) {
             assert.equal(fixture.writes().length, 1);
             assert.equal(fixture.writes()[0].destination, destination);
             const beforeWrite = fixture.calls.slice(0, fixture.calls.indexOf(fixture.writes()[0]));
-            assert.deepEqual(beforeWrite.slice(-2).map((call) => [call.destination, call.args[2]]),
-                [['npm', 'dist'], ['github', 'dist']]);
+            assert.deepEqual(beforeWrite.slice(-3).map((call) => [call.destination, call.args[2]]),
+                [['npm', 'dist'], ['github', 'name'], ['github', 'dist']]);
         });
     }
 }
@@ -169,4 +170,15 @@ test('isolated npm reads/login/publish never inherit GitHub credentials or ambie
 
 test('no GitHub read credential aborts before even invoking npm', () => {
     assert.throws(() => withRegistry('github', () => assert.fail('must not run'), {}), /read access is required/);
+});
+
+test('C08: hidden or malformed GitHub registry root aborts before login/write despite absent versions', () => {
+    // REST visibility and whoami can succeed with no registry package access; neither is evidence here.
+    for (const githubDocument of [missing(), success({}), success({ name: release.name, 'dist-tags': {} }),
+        success({ name: release.name, 'dist-tags': { latest: false } })]) {
+        const fixture = registryFixture({}, { githubDocument });
+        assert.throws(() => publish(release, 'npm', { ...fixture, interactive: true }));
+        assert.equal(fixture.writes().length, 0);
+        assert(!fixture.calls.some((call) => call.args[0] === 'login'));
+    }
 });

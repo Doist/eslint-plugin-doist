@@ -36,7 +36,8 @@ export function withRegistry(destination, callback, parentEnv = process.env, spa
 }
 
 export function lookup(run, destination, spec, field = 'dist') {
-    const result = run(['view', spec, field, '--json', `--registry=${registries[destination]}`]);
+    const fields = Array.isArray(field) ? field : [field];
+    const result = run(['view', spec, ...fields, '--json', `--registry=${registries[destination]}`]);
     if (result.status === 0) {
         const value = JSON.parse(result.stdout);
         assert(value && typeof value === 'object' && !Array.isArray(value) && !value.error,
@@ -69,8 +70,19 @@ export function assertSameArtifact(dist, release) {
 export function preflight(release, registry = withRegistry) {
     const copies = {};
     for (const destination of ['npm', 'github']) {
-        copies[destination] = registry(destination, (run) =>
-            lookup(run, destination, `${release.name}@${release.version}`));
+        copies[destination] = registry(destination, (run) => {
+            if (destination === 'github') {
+                // This is an existing transferred mirror. Root 404 may hide an ACL failure.
+                const document = lookup(run, destination, release.name, ['name', 'dist-tags']);
+                assert.equal(document?.name, release.name, 'Existing GitHub registry package must be readable before version absence is accepted');
+                const tags = document['dist-tags'];
+                assert(tags && typeof tags === 'object' && !Array.isArray(tags) && Object.keys(tags).length &&
+                    Object.values(tags).every((version) => typeof version === 'string' &&
+                        /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(version)),
+                'GitHub registry dist-tags must be well-formed; publication stopped');
+            }
+            return lookup(run, destination, `${release.name}@${release.version}`);
+        });
         if (copies[destination]) assertSameArtifact(copies[destination], release);
     }
     return copies;
