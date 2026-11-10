@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { preflight, publish } from './registry.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = JSON.parse(readFileSync(join(root, 'package.json')));
 const [mode, directory, destination] = process.argv.slice(2);
-assert(['pack', 'verify', 'publish'].includes(mode), 'Use pack|verify|publish DIRECTORY [npm|github]');
+assert(['pack', 'verify', 'preflight', 'bootstrap', 'publish'].includes(mode),
+    'Use pack|verify|preflight|bootstrap|publish DIRECTORY [npm|github]');
 assert(directory, 'An artifact directory is required');
 const output = resolve(directory);
 const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
@@ -56,73 +57,18 @@ if (mode === 'pack') {
 const metadata = verify();
 console.log(JSON.stringify(metadata, null, 2));
 
-if (mode === 'publish') {
-    assert(['npm', 'github'].includes(destination), 'Choose npm or github explicitly');
-    assert.equal(process.env.GITHUB_REPOSITORY, 'todoist/eslint-plugin-doist', 'Publish only from the renamed repository');
-    assert.equal(process.env.GITHUB_REF, `refs/tags/v${source.version}`, 'Publish only from the matching version tag');
-    const distTag = process.env.RELEASE_DIST_TAG || 'latest';
-    assert(['latest', 'recovery'].includes(distTag), 'Use latest or the explicit recovery dist-tag');
-    const registry = destination === 'npm' ? 'https://registry.npmjs.org/' : 'https://npm.pkg.github.com/';
-    const staging = mkdtempSync(join(tmpdir(), 'eslint-plugin-publish-'));
-    try {
-        // Drop ambient npm routing/auth config; use an isolated working directory and scope mapping.
-        const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^npm_config_/i.test(key)));
-        delete env.NPM_TOKEN;
-        delete env.NODE_AUTH_TOKEN;
-        const config = join(staging, 'npmrc');
-        const globalConfig = join(staging, 'global-npmrc');
-        writeFileSync(globalConfig, '');
-        let contents = `registry=${registry}\n@todoist:registry=${registry}\n`;
-        if (destination === 'github') {
-            assert(process.env.NODE_AUTH_TOKEN, 'GitHub Packages write token required');
-            env.NODE_AUTH_TOKEN = process.env.NODE_AUTH_TOKEN;
-            contents += '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n';
-        }
-        writeFileSync(config, contents, { mode: 0o600 });
-        env.NPM_CONFIG_USERCONFIG = config;
-        env.NPM_CONFIG_GLOBALCONFIG = globalConfig;
-        const options = { cwd: staging, env, encoding: 'utf8' };
-        const spec = `${source.name}@${source.version}`;
-        const existing = () => {
-            const result = spawnSync('npm', ['view', spec, 'dist', '--json', `--registry=${registry}`], options);
-            if (result.status !== 0) {
-                let error;
-                try { error = JSON.parse(result.stdout).error; } catch { /* Fail closed below. */ }
-                if (error?.code === 'E404') return false;
-                throw new Error(`Registry inspection failed: ${result.stderr || result.error}`);
-            }
-            const dist = JSON.parse(result.stdout);
-            if (dist.integrity) assert.equal(dist.integrity, metadata.integrity, 'Existing registry artifact differs');
-            else assert.equal(dist.shasum, metadata.shasum, 'Existing registry artifact differs');
-            return true;
-        };
-        const checkLatest = () => {
-            const result = spawnSync('npm', ['view', source.name, 'dist-tags', '--json', `--registry=${registry}`], options);
-            if (result.status !== 0) {
-                let error;
-                try { error = JSON.parse(result.stdout).error; } catch { /* Fail closed below. */ }
-                if (error?.code === 'E404') return; // First real package publication.
-                throw new Error(`Dist-tag inspection failed: ${result.stderr || result.error}`);
-            }
-            const latest = JSON.parse(result.stdout).latest;
-            if (!latest) return;
-            assert.match(latest, /^\d+\.\d+\.\d+$/, 'Non-stable latest needs an explicit maintainer recovery policy');
-            const current = latest.split('.').map(BigInt);
-            const target = source.version.split('.').map(BigInt);
-            const differing = current.findIndex((value, index) => value !== target[index]);
-            assert(differing === -1 || current[differing] < target[differing],
-                `Refusing to move latest backwards from ${latest}; retain this artifact and use a reviewed recovery tag`);
-        };
-        if (existing()) {
-            console.log(`${spec} already matches on ${destination}; no publication or dist-tag changes`);
-        } else {
-            if (distTag === 'latest') checkLatest();
-            const args = ['publish', tarball, '--ignore-scripts', `--tag=${distTag}`, `--registry=${registry}`];
-            if (destination === 'npm') args.push('--access=public', '--provenance=false');
-            execFileSync('npm', args, { ...options, stdio: 'inherit' });
-            assert(existing(), 'Published version was not returned by the registry; retry the retained artifact');
-        }
-    } finally {
-        rmSync(staging, { recursive: true, force: true });
+const release = { ...metadata, tarball };
+if (mode === 'preflight') {
+    preflight(release);
+    console.log('Both registry copies are absent or match the retained artifact');
+}
+if (mode === 'bootstrap' || mode === 'publish') {
+    if (mode === 'publish') {
+        assert.equal(process.env.GITHUB_REPOSITORY, 'todoist/eslint-plugin-doist', 'Publish only from the renamed repository');
+        assert.equal(process.env.GITHUB_REF, `refs/tags/v${source.version}`, 'Publish only from the matching version tag');
     }
+    console.log(publish(release, mode === 'bootstrap' ? 'npm' : destination, {
+        tag: process.env.RELEASE_DIST_TAG || 'latest',
+        interactive: mode === 'bootstrap',
+    }));
 }

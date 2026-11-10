@@ -1,0 +1,111 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+export const registries = {
+    npm: 'https://registry.npmjs.org/',
+    github: 'https://npm.pkg.github.com/',
+};
+
+// Each read/write gets independent routing. Only GitHub subprocesses receive its token.
+export function withRegistry(destination, callback, parentEnv = process.env, spawn = spawnSync) {
+    assert(Object.hasOwn(registries, destination), 'Choose npm or github explicitly');
+    if (destination === 'github') assert(parentEnv.NODE_AUTH_TOKEN, 'GitHub Packages read access is required even for npm-only publication');
+    const registry = registries[destination];
+    const directory = mkdtempSync(join(tmpdir(), 'eslint-plugin-registry-'));
+    try {
+        const env = Object.fromEntries(Object.entries(parentEnv).filter(([key]) =>
+            !/^(npm_config_|npm_token$|node_auth_token$|github_token$|gh_token$|github_packages_token$)/i.test(key)));
+        env.NPM_CONFIG_USERCONFIG = join(directory, 'npmrc');
+        env.NPM_CONFIG_GLOBALCONFIG = join(directory, 'global-npmrc');
+        writeFileSync(env.NPM_CONFIG_GLOBALCONFIG, '');
+        let config = `registry=${registry}\n@todoist:registry=${registry}\n`;
+        if (destination === 'github') {
+            env.NODE_AUTH_TOKEN = parentEnv.NODE_AUTH_TOKEN;
+            config += '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n';
+        }
+        writeFileSync(env.NPM_CONFIG_USERCONFIG, config, { mode: 0o600 });
+        return callback((args, options = {}) => spawn('npm', args, {
+            cwd: directory, env, encoding: 'utf8', ...options,
+        }));
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+}
+
+export function lookup(run, destination, spec, field = 'dist') {
+    const result = run(['view', spec, field, '--json', `--registry=${registries[destination]}`]);
+    if (result.status === 0) {
+        const value = JSON.parse(result.stdout);
+        assert(value && typeof value === 'object' && !Array.isArray(value) && !value.error,
+            `Invalid ${destination} metadata; publication stopped`);
+        return value;
+    }
+    const codes = [];
+    let ambiguous = false;
+    for (const output of [result.stdout, result.stderr]) {
+        if (!output?.trim()) continue;
+        let code;
+        try { code = JSON.parse(output).error?.code; } catch { /* Try npm's CLI error format. */ }
+        const cliCodes = [...output.matchAll(/(?:^|\n)npm (?:ERR!|error) code ([A-Z0-9_]+)/g)]
+            .map((match) => match[1]);
+        if (code) codes.push(code);
+        codes.push(...cliCodes);
+        if (!code && !cliCodes.length) ambiguous = true;
+    }
+    if (!ambiguous && !result.error && !result.signal && codes.length && codes.every((code) => code === 'E404')) return null;
+    // Do not print raw npm output: it can include credential/config details.
+    throw new Error(`${destination} registry lookup failed (${codes.join(', ') || 'unclassified error'}); publication stopped`);
+}
+
+export function assertSameArtifact(dist, release) {
+    assert(dist, 'Published version is missing');
+    if (dist.integrity) assert.equal(dist.integrity, release.integrity, 'Existing registry artifact differs');
+    else assert.equal(dist.shasum, release.shasum, 'Existing registry artifact differs');
+}
+
+export function preflight(release, registry = withRegistry) {
+    const copies = {};
+    for (const destination of ['npm', 'github']) {
+        copies[destination] = registry(destination, (run) =>
+            lookup(run, destination, `${release.name}@${release.version}`));
+        if (copies[destination]) assertSameArtifact(copies[destination], release);
+    }
+    return copies;
+}
+
+function checkLatest(run, destination, release) {
+    const latest = lookup(run, destination, release.name, 'dist-tags')?.latest;
+    if (!latest) return;
+    assert.match(latest, /^\d+\.\d+\.\d+$/, 'Non-stable latest needs an explicit maintainer recovery policy');
+    const current = latest.split('.').map(BigInt);
+    const target = release.version.split('.').map(BigInt);
+    const differing = current.findIndex((value, index) => value !== target[index]);
+    assert(differing === -1 || current[differing] < target[differing],
+        `Refusing to move latest backwards from ${latest}; retain this artifact and use the recovery tag`);
+}
+
+export function publish(release, destination, { registry = withRegistry, tag = 'latest', interactive = false } = {}) {
+    assert(Object.hasOwn(registries, destination), 'Choose npm or github explicitly');
+    assert(['latest', 'recovery'].includes(tag), 'Use latest or the explicit recovery dist-tag');
+    assert(!interactive || destination === 'npm', 'Interactive bootstrap is only for this public npm package');
+    if (preflight(release, registry)[destination]) return 'already-matches';
+    return registry(destination, (run) => {
+        if (interactive) {
+            const login = run(['login', `--registry=${registries.npm}`], { stdio: 'inherit' });
+            assert.equal(login.status, 0, 'Interactive npm login failed; publication was not attempted');
+        }
+        if (tag === 'latest') checkLatest(run, destination, release);
+        // Recheck BOTH copies immediately before every write, including after interactive login.
+        if (preflight(release, registry)[destination]) return 'already-matches';
+        const args = ['publish', release.tarball, '--ignore-scripts', `--tag=${tag}`, `--registry=${registries[destination]}`];
+        if (destination === 'npm') args.push('--access=public', '--provenance=false');
+        // npm publish itself may require a fresh 2FA challenge after login.
+        const result = run(args, { stdio: 'inherit' });
+        assert.equal(result.status, 0, 'Publication failed; retain the artifact and retry without a version bump');
+        assertSameArtifact(lookup(run, destination, `${release.name}@${release.version}`), release);
+        return 'published-and-verified';
+    });
+}

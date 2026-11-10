@@ -87,7 +87,8 @@ jobs:
           const run = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/source-run.json`));
           assert.equal(run.repository.full_name, process.env.GITHUB_REPOSITORY);
           assert.equal(run.head_repository.full_name, process.env.GITHUB_REPOSITORY);
-          assert(['main', process.env.GITHUB_REF_NAME].includes(run.head_branch));
+          assert(['main', process.env.GITHUB_REF_NAME].includes(run.head_branch) ||
+            (run.event === 'push' && run.head_branch === null));
           assert.equal(run.path, '.github/workflows/publish.yml');
           assert.equal(run.head_sha, process.env.GITHUB_SHA);
           assert.equal(run.conclusion, 'success');
@@ -105,6 +106,8 @@ jobs:
         run: node .github/scripts/release.mjs verify "$RUNNER_TEMP/release-artifacts"
       - name: Publish or verify npm artifact
         env:
+          # Read the opposite GitHub copy; registry.mjs strips this from npm subprocesses.
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_DIST_TAG: ${{ inputs.dist_tag }}
         if: inputs.operation == 'npm' || inputs.operation == 'both'
         run: node .github/scripts/release.mjs publish "$RUNNER_TEMP/release-artifacts" npm

@@ -80,25 +80,51 @@ registry. No repository/global routing is inherited.
 
 A new npm package must exist before trust can be configured. An authorized
 `todoist` npm maintainer bootstraps the **real reviewed tarball**, interactively
-with 2FA; no placeholder version. From the downloaded artifact directory, use
-isolated config (these are future operator commands, not preparation checks):
+with 2FA; no placeholder version. Use the `bootstrap` helper instead of a raw
+`npm publish`: it verifies the local artifact, inspects the exact version in
+**both** required registries, and stops before any package write if either copy
+has different bytes or a lookup is ambiguous. Matching copies are skipped.
+
+The operator must have an existing **GitHub personal access token (classic)**
+with `read:packages`, held by an account with Read access to the intended mirror
+and authorized for the organization's SSO if required. A valid token without the
+package's access grant is insufficient. Before interpreting a 404 as absence,
+the package administrator must confirm those intended read permissions (or that
+the package truly does not yet exist). Do not treat an inaccessible private
+mirror as missing. Do not create tokens/change ACLs as a preparation check.
+
+From the checkout at the selected artifact's exact reviewed source commit, with
+`RELEASE_DIR` pointing to the downloaded original artifact, use this Bash block.
+It reads the existing GitHub credential without echoing it or putting it into
+shell history. These are **future authorized operator commands**, not checks run
+during preparation:
 
 ```sh
-cd "$RELEASE_DIR"
-export NPM_CONFIG_USERCONFIG="$RELEASE_DIR/operator-npmrc"
-export NPM_CONFIG_GLOBALCONFIG="$RELEASE_DIR/empty-global-npmrc"
-printf '' > "$NPM_CONFIG_GLOBALCONFIG"
-printf 'registry=https://registry.npmjs.org/\n@todoist:registry=https://registry.npmjs.org/\n' > .npmrc
-npm login --registry=https://registry.npmjs.org/
-npm publish ./todoist-eslint-plugin-doist-2.0.2.tgz \
-  --registry=https://registry.npmjs.org/ --access=public --tag=latest --ignore-scripts
-npm view @todoist/eslint-plugin-doist@2.0.2 dist --json --registry=https://registry.npmjs.org/
+export RELEASE_DIR
+bash <<'BASH'
+read -r -s -p 'Existing GitHub Packages read token: ' NODE_AUTH_TOKEN </dev/tty
+printf '\n'
+export NODE_AUTH_TOKEN
+node .github/scripts/release.mjs bootstrap "$RELEASE_DIR" </dev/tty
+BASH
 ```
 
-Inspect the shell for pre-existing `npm_config_*` routing overrides before these
-commands; the local `.npmrc` must resolve `@todoist` to npmjs. Do not share/archive
-the login config; retain only the three artifact files. Local first publication
-does not claim CI provenance or validate future OIDC trust.
+The helper creates independent temporary npm user/global configs with explicit
+`@todoist` scope mappings. Public npm preflight reads are unauthenticated; only
+GitHub reads receive `NODE_AUTH_TOKEN`. npm login and publication run in the same
+isolated npmjs directory, with inherited terminal IO for **both** operations so
+publish can request a fresh 2FA challenge. The GitHub Packages/CLI token variables and ambient
+npm routing/auth are stripped from npm subprocesses. Both registries are checked
+again after login, immediately before the write. Temporary login configs are
+removed even after failure; retain only the original artifact/checksum files.
+
+The npm write uses `--access=public --tag=latest --ignore-scripts --provenance=false`.
+The existing newer-latest guard still applies; for an approved older-version
+recovery use `RELEASE_DIST_TAG=recovery` with the helper. Local publication does
+not validate future OIDC trust. A separate read-only check is available as
+`node .github/scripts/release.mjs preflight "$RELEASE_DIR"` with the same intended
+GitHub credential, but publication always repeats the check rather than trusting
+an earlier preflight result.
 
 Then complete the GitHub mirror using that **same original run** (the version tag
 must point to the artifact's commit):
@@ -108,7 +134,9 @@ gh workflow run publish.yml --repo todoist/eslint-plugin-doist --ref v2.0.2 \
   -f operation=github -f artifact_run_id="$RUN_ID"
 ```
 
-GitHub publication uses `GITHUB_TOKEN` with `packages:write`. Check repository
+GitHub publication uses `GITHUB_TOKEN` with `packages:write` (including Read).
+The npm-only workflow step also receives this token for the opposite-copy
+preflight; the helper removes it from every npmjs subprocess. Check repository
 linkage, preserved public visibility, publisher Write access, and specific
 consumer Read grants in **Manage Actions access**. Local GitHub npm installs
 require appropriate authentication even when the package is public.
@@ -134,10 +162,14 @@ on that tag with the original `artifact_run_id`. For a partial release, choose
 (not a fork or PR event), on `main` or the matching version tag, with the exact
 checked-out SHA. A GitHub comparison must confirm that commit belongs to reviewed
 `main` history. The script then verifies package identity and digest before
-publishing. If the exact version
-already exists it must have matching integrity (or matching SHA-1 where the
+publishing. Before **each** registry write, even a one-mirror retry, both exact
+same-version copies must be absent or match the selected artifact. Choosing a
+different valid pack run for the same version never permits divergence from an
+already-published opposite copy. Existing copies must have matching integrity (or matching SHA-1 where the
 registry does not return integrity); a mismatch stops the job. Authentication or
-other read errors stop the job; only E404 permits a publication attempt. A skipped
+other read errors stop the job. Structured E404 from either output stream, or
+npm's explicit E404 error code, permits absence only with the intended registry
+read permissions; conflicting/unclassified errors fail closed. A skipped
 existing version does not move its dist-tags. Before a missing-version publish,
 the job refuses to move an existing newer `latest` backwards; a non-stable `latest`
 also requires a maintainer decision. In those cases, retain the same artifact and
@@ -155,7 +187,8 @@ are serialized for the whole package, across version tags. Coordinate external
 maintainer publications with this queue so the latest check remains valid.
 
 If an artifact expires, use the archived original tarball and checksum with an
-authorized maintainer's registry-specific credentials in an isolated directory.
+authorized maintainer's registry-specific credentials and the same both-registry
+preflight helper in an isolated directory; never bypass it with a raw publish.
 Do not rebuild, rerun version calculation, change versions, or overwrite releases.
 If no exact retained artifact is available, stop and recover it before retrying.
 
