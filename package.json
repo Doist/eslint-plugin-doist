@@ -1,8 +1,8 @@
 {
-  "name": "@doist/eslint-plugin-doist",
-  "version": "2.0.1",
+  "name": "@todoist/eslint-plugin-doist",
+  "version": "2.0.2",
   "description": "A collection of Doist ESLint rules",
-  "repository": "https://github.com/Doist/eslint-plugin-doist",
+  "repository": "https://github.com/todoist/eslint-plugin-doist",
   "keywords": [
     "eslint",
     "eslintplugin",
