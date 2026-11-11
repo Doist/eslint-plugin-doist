@@ -1,8 +1,8 @@
 {
-  "name": "@doist/eslint-plugin-doist",
-  "version": "2.0.1",
+  "name": "@todoist/eslint-plugin-doist",
+  "version": "2.0.2",
   "description": "A collection of Doist ESLint rules",
-  "repository": "https://github.com/Doist/eslint-plugin-doist",
+  "repository": "https://github.com/todoist/eslint-plugin-doist",
   "keywords": [
     "eslint",
     "eslintplugin",
@@ -19,6 +19,9 @@
     "requireindex": "^1.2.0"
   },
   "devDependencies": {
+    "@eslint/compat": "^1.3.2",
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^8.57.0",
     "eslint": "^9.9.0",
     "eslint-plugin-eslint-plugin": "^6.2.0",
     "eslint-plugin-node": "^11.1.0",
@@ -31,7 +34,7 @@
     "npm": "^10.9.2 || >= 11.5.1"
   },
   "peerDependencies": {
-    "eslint": ">=9"
+    "eslint": "^8.57.0 || ^9.0.0"
   },
   "license": "ISC"
 }

@@ -16,9 +16,11 @@ const rule = require("../../../lib/rules/import-file-naming"),
 // Tests
 //------------------------------------------------------------------------------
 
-const ruleTester = new RuleTester({
-  parserOptions: { ecmaVersion: 2022, sourceType: "module" }
-});
+const parserOptions = { ecmaVersion: 2022, sourceType: "module" };
+const eslintMajor = Number(require("eslint/package.json").version.split(".")[0]);
+const ruleTester = new RuleTester(eslintMajor >= 9
+  ? { languageOptions: parserOptions }
+  : { parserOptions });
 ruleTester.run("import-file-naming", rule, {
   valid: [
     {
