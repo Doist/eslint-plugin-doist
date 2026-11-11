@@ -8,13 +8,20 @@ import { preflight, publish } from './registry.mjs';
 import { archiveFilename, retainedArtifact, withOriginalArtifact } from './source.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const source = JSON.parse(readFileSync(join(root, 'package.json')));
 const [mode, directory, destination] = process.argv.slice(2);
 assert(['pack', 'fetch', 'verify', 'preflight', 'bootstrap', 'publish'].includes(mode),
     'Use pack|fetch|verify|preflight|bootstrap|publish DIRECTORY [npm|github]');
 assert(directory, 'An artifact directory is required');
 const output = resolve(directory);
-const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const sourceSha = process.env.RELEASE_SOURCE_SHA || checkoutSha;
+assert.match(sourceSha, /^[a-f0-9]{40}$/);
+if (process.env.RELEASE_SOURCE_SHA) {
+    assert(mode !== 'pack' && !process.env.GITHUB_ACTIONS && !process.env.GITHUB_RUN_ID,
+        'An original source override is only for local retained-artifact recovery, never packing or Actions');
+}
+// A reviewed helper may advance independently of the immutable artifact's original source.
+const source = JSON.parse(execFileSync('git', ['show', `${sourceSha}:package.json`], { cwd: root, encoding: 'utf8' }));
 assert.equal(source.name, '@todoist/eslint-plugin-doist');
 assert.match(source.version, /^\d+\.\d+\.\d+$/); // Stable releases use latest; no implicit prerelease promotion.
 const filename = `todoist-eslint-plugin-doist-${source.version}.tgz`;
@@ -75,10 +82,12 @@ if (mode === 'preflight') {
 }
 if (mode === 'bootstrap' || mode === 'publish') {
     if (mode === 'publish') {
-        assert.equal(process.env.GITHUB_REPOSITORY, 'todoist/eslint-plugin-doist', 'Publish only from the renamed repository');
-        assert.equal(process.env.GITHUB_REF, `refs/tags/v${source.version}`, 'Publish only from the matching version tag');
+        if (process.env.GITHUB_ACTIONS || process.env.GITHUB_RUN_ID) {
+            assert.equal(process.env.GITHUB_REPOSITORY, 'todoist/eslint-plugin-doist', 'Publish only from the renamed repository');
+            assert.equal(process.env.GITHUB_REF, `refs/tags/v${source.version}`, 'Publish only from the matching version tag');
+        } else assert.equal(destination, 'github', 'Local npm publication must use interactive bootstrap');
     }
-    console.log(withOriginalArtifact(selection, output, () => publish(release, mode === 'bootstrap' ? 'npm' : destination, {
+    console.log(withOriginalArtifact(selection, output, (binding) => publish({ ...release, ...binding }, mode === 'bootstrap' ? 'npm' : destination, {
         tag: process.env.RELEASE_DIST_TAG || 'latest',
         interactive: mode === 'bootstrap',
     })));

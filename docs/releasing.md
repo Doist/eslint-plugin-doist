@@ -114,7 +114,9 @@ metadata or auth/network ambiguity stops even an npm-only bootstrap/retry before
 login/write. REST visibility, `npm whoami` and an administrator statement do not
 bypass this executable gate. If the transferred mirror is not readable, its
 existing owner must restore the intended package access/routing before retrying.
-There is no first-mirror absence bypass. Do not create tokens/change ACLs as a preparation check.
+Ordinary workflow retries have no absence override. The only exception is the
+local, artifact-bound first-namespace operation below. Do not create tokens/change
+ACLs as a preparation check.
 
 From the checkout at the selected artifact's exact reviewed source commit, with
 `RELEASE_DIR` pointing to the authenticated original artifact and
@@ -167,6 +169,65 @@ preflight; the helper removes it from every npmjs subprocess. Check repository
 linkage, preserved public visibility, publisher Write access, and specific
 consumer Read grants in **Manage Actions access**. Local GitHub npm installs
 require appropriate authentication even when the package is public.
+
+## Local first-namespace operation after owner confirmation
+
+A rename can leave the old `@doist` registry root readable while the new
+`@todoist` root returns 404. That 404, REST visibility, inventory and `whoami`
+are not proof of absence. An organization/package owner must explicitly confirm
+that the **new** package is absent, rather than hidden by ACLs, for the exact
+package/version, destination, original run ID, artifact ID and API ZIP digest.
+Record the owner and fact with the release evidence. If the owner cannot establish
+absence/access, stop for GitHub support; do not override an inaccessible package.
+
+Only that local operation may set `CONFIRMED_ABSENT_GITHUB_PACKAGE`. The helper
+rejects it in Actions, rejects any binding mismatch, requires successful GitHub
+registry authentication, and still reads **both exact-version copies before each
+write**, including after npm login. Root404 combined with any existing version is
+contradictory and stops. Auth/network/malformed responses and different bytes stop;
+readable roots always use the normal checks. Normal retries require a readable new
+root. The old scope and its releases are preserved.
+
+A reviewed recovery helper may be newer than the artifact. Locally set
+`RELEASE_SOURCE_SHA` to the original reviewed commit; the helper reads its original
+manifest from Git and independently binds the archive through the source API.
+This override cannot be used for packing or in Actions. Do not rebuild the artifact.
+
+For the owner-confirmed first npm operation, use the same existing source/package
+credentials and terminal setup as above, with these bindings:
+
+```sh
+export RELEASE_SOURCE_SHA="$ORIGINAL_SOURCE_SHA"
+export CONFIRMED_ABSENT_GITHUB_PACKAGE="@todoist/eslint-plugin-doist@2.0.2:npm:$ARTIFACT_RUN_ID:$ARTIFACT_ID:$API_ARCHIVE_DIGEST"
+node .github/scripts/release.mjs bootstrap "$RELEASE_DIR" </dev/tty
+```
+
+For the separately bound first GitHub mirror operation, use a classic token with
+actual `read:packages` and `write:packages` access as `NODE_AUTH_TOKEN`, preserve
+the source API credentials and original IDs, and select `github` in the binding:
+
+```sh
+export CONFIRMED_ABSENT_GITHUB_PACKAGE="@todoist/eslint-plugin-doist@2.0.2:github:$ARTIFACT_RUN_ID:$ARTIFACT_ID:$API_ARCHIVE_DIGEST"
+node .github/scripts/release.mjs publish "$RELEASE_DIR" github </dev/tty
+unset CONFIRMED_ABSENT_GITHUB_PACKAGE RELEASE_SOURCE_SHA
+```
+
+`API_ARCHIVE_DIGEST` includes the `sha256:` prefix and comes from authenticated
+GitHub artifact metadata, not a self-declared local file. Verify both registry
+copies and fresh installs afterward. If npm accepts the write but reports
+processing and metadata still returns404, retain that receipt and perform only
+read checks until it becomes visible; do not issue a duplicate write.
+
+New GitHub packages can inherit INTERNAL visibility even when npm is public.
+Verify the **new package's ID, scope, version and repository** before correcting
+only that package to PUBLIC under the release authorization; re-read the API and
+verify a fresh authenticated consumer install. Preserve the old package's
+visibility and access. Future OIDC/environment settings are separate operations.
+
+Metadata reads use explicit `@>=0` to avoid npm resolving a missing default tag;
+multiple version projections must agree. The focused regression uses the actual
+npm client against a loopback mock with the plugin's beta/latest and beta-only
+tag shapes. No live package write occurs in these tests.
 
 ## Later trusted releases and retries
 

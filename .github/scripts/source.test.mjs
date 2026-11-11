@@ -52,7 +52,10 @@ test('original successful attempt and exact archive survive later failed/skipped
     for (const conclusion of ['failure', 'skipped']) {
         const f = fixture();
         f.responses['actions/runs/123'].conclusion = conclusion;
-        assert.deepEqual(retainedArtifact(selection, f).entries, f.entries);
+        const verified = retainedArtifact(selection, f);
+        assert.deepEqual(verified.entries, f.entries);
+        assert.deepEqual(verified.binding, { sourceRunId: selection.runId, sourceArtifactId: selection.artifactId,
+            sourceArchiveDigest: f.artifact.digest });
         assert(!f.calls.some((path) => path.endsWith('/actions/runs/123')));
         assert(f.calls.some((path) => path.endsWith('/attempts/1')));
         assert(f.calls.some((path) => path.endsWith('/artifacts/456/zip')));

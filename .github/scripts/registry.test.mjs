@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { lookup, publish, registries, withRegistry } from './registry.mjs';
 
 const release = {
@@ -12,12 +18,13 @@ const different = { integrity: 'sha512-different-pack-same-version' };
 const success = (value) => ({ status: 0, stdout: JSON.stringify(value), stderr: '' });
 const missing = () => ({ status: 1, stdout: JSON.stringify({ error: { code: 'E404' } }), stderr: '' });
 
-function registryFixture(initial, { latest = '2.0.1', fail, onLogin, githubDocument } = {}) {
+function registryFixture(initial, { latest = '2.0.1', fail, onLogin, githubDocument, identity = success('owner') } = {}) {
     const copies = { ...initial };
     const calls = [];
     const registry = (destination, callback) => callback((args, options = {}) => {
         calls.push({ destination, args, options });
         assert(args.includes(`--registry=${registries[destination]}`));
+        if (args[0] === 'whoami') return identity;
         if (args[0] === 'login') {
             onLogin?.(copies);
             return { status: 0 };
@@ -132,6 +139,7 @@ test('isolated npm reads/login/publish never inherit GitHub credentials or ambie
     const parentEnv = {
         PATH: process.env.PATH,
         NODE_AUTH_TOKEN: 'github-secret-fixture', GH_TOKEN: 'other-github-fixture', GITHUB_TOKEN: 'fixture',
+        GH_PACKAGES_TOKEN: 'package-fixture', CONFIRMED_ABSENT_GITHUB_PACKAGE: 'operation-fixture',
         NPM_TOKEN: 'ambient-npm-fixture', NPM_CONFIG_REGISTRY: 'https://incorrect.invalid/',
     };
     const seen = [];
@@ -144,6 +152,8 @@ test('isolated npm reads/login/publish never inherit GitHub credentials or ambie
         assert.equal(options.env.GH_TOKEN, undefined);
         assert.equal(options.env.GITHUB_TOKEN, undefined);
         assert.equal(options.env.NPM_TOKEN, undefined);
+        assert.equal(options.env.GH_PACKAGES_TOKEN, undefined);
+        assert.equal(options.env.CONFIRMED_ABSENT_GITHUB_PACKAGE, undefined);
         if (args.includes(`--registry=${registries.github}`)) {
             assert.equal(options.env.NODE_AUTH_TOKEN, parentEnv.NODE_AUTH_TOKEN);
             assert(config.includes('//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}'));
@@ -180,5 +190,88 @@ test('C08: hidden or malformed GitHub registry root aborts before login/write de
         assert.throws(() => publish(release, 'npm', { ...fixture, interactive: true }));
         assert.equal(fixture.writes().length, 0);
         assert(!fixture.calls.some((call) => call.args[0] === 'login'));
+    }
+});
+
+for (const destination of ['npm', 'github']) {
+    test(`first namespace ${destination}: exact owner confirmation, authentication and both absent copies permit one write`, () => {
+        const bound = { ...release, sourceRunId: '123', sourceArtifactId: '456', sourceArchiveDigest: `sha256:${'a'.repeat(64)}` };
+        const env = { CONFIRMED_ABSENT_GITHUB_PACKAGE: `${release.name}@${release.version}:${destination}:123:456:${bound.sourceArchiveDigest}` };
+        const fixture = registryFixture({}, { githubDocument: missing() });
+        assert.equal(publish(bound, destination, { ...fixture, env, interactive: destination === 'npm' }), 'published-and-verified');
+        assert.equal(fixture.writes().length, 1);
+        assert.equal(fixture.writes()[0].destination, destination);
+        assert.equal(fixture.calls.filter(call => call.args[0] === 'whoami').length, 2, 'Authenticate on both preflights');
+    });
+
+    test(`first namespace ${destination}: unsafe or contradictory evidence causes zero writes`, () => {
+        const bound = { ...release, sourceRunId: '123', sourceArtifactId: '456', sourceArchiveDigest: `sha256:${'a'.repeat(64)}` };
+        const confirmation = `${release.name}@${release.version}:${destination}:123:456:${bound.sourceArchiveDigest}`;
+        const cases = [
+            { env: {} },
+            ...['npm:123', 'github:123', ':123:', ':456:', bound.sourceArchiveDigest].map(part =>
+                ({ env: { CONFIRMED_ABSENT_GITHUB_PACKAGE: confirmation.replace(part, 'wrong') } }))
+                .filter(item => item.env.CONFIRMED_ABSENT_GITHUB_PACKAGE !== confirmation),
+            { env: { CONFIRMED_ABSENT_GITHUB_PACKAGE: confirmation, GITHUB_ACTIONS: 'true' } },
+            { env: { CONFIRMED_ABSENT_GITHUB_PACKAGE: confirmation, GITHUB_RUN_ID: '789' } },
+            { identity: { status: 1, stdout: '' } },
+            { identity: success({}) },
+            { githubDocument: success({}) },
+            ...['E401', 'E403', 'ETIMEDOUT'].map(code => ({ githubDocument: { status: 1, stdout: JSON.stringify({ error: { code } }) } })),
+            { copies: { github: matching } },
+            { copies: { github: different } },
+            { copies: { npm: different } },
+        ];
+        for (const scenario of cases) {
+            const fixture = registryFixture(scenario.copies || {}, { githubDocument: missing(), ...scenario });
+            assert.throws(() => publish(bound, destination, {
+                ...fixture, env: scenario.env || { CONFIRMED_ABSENT_GITHUB_PACKAGE: confirmation },
+                interactive: destination === 'npm',
+            }));
+            assert.equal(fixture.writes().length, 0);
+        }
+    });
+}
+
+test('first namespace bootstrap still rejects a contradictory opposite copy that appears after login', () => {
+    const bound = { ...release, sourceRunId: '123', sourceArtifactId: '456', sourceArchiveDigest: `sha256:${'a'.repeat(64)}` };
+    const fixture = registryFixture({}, { githubDocument: missing(), onLogin: copies => { copies.github = different; } });
+    assert.throws(() => publish(bound, 'npm', { ...fixture, interactive: true,
+        env: { CONFIRMED_ABSENT_GITHUB_PACKAGE: `${release.name}@${release.version}:npm:123:456:${bound.sourceArchiveDigest}` } }), /Contradictory/);
+    assert.equal(fixture.writes().length, 0);
+});
+
+test('actual npm reads beta/latest and beta-only root metadata without default-tag resolution', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'eslint-plugin-metadata-test-'));
+    const name = '@mock/plugin';
+    const document = { name, 'dist-tags': { beta: '2.0.0-beta3', latest: '2.0.1' }, versions: {
+        '1.0.0': { name, version: '1.0.0' }, '2.0.0-beta3': { name, version: '2.0.0-beta3' }, '2.0.1': { name, version: '2.0.1' },
+    } };
+    const server = createServer((request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify(document));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        const registry = `http://127.0.0.1:${server.address().port}/`;
+        const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/(token|^npm_config_)/i.test(key)));
+        env.NPM_CONFIG_USERCONFIG = join(directory, 'npmrc');
+        env.NPM_CONFIG_GLOBALCONFIG = join(directory, 'global');
+        writeFileSync(env.NPM_CONFIG_USERCONFIG, `@mock:registry=${registry}\ncache=${join(directory, 'cache')}\n`);
+        writeFileSync(env.NPM_CONFIG_GLOBALCONFIG, '');
+        for (const hasLatest of [true, false]) {
+            if (!hasLatest) delete document['dist-tags'].latest;
+            let args;
+            lookup(actual => { args = actual; return success({}); }, 'github', name, ['name', 'dist-tags']);
+            assert.equal(args[1], `${name}@>=0`);
+            args[args.length - 1] = `--registry=${registry}`;
+            const result = await promisify(execFile)('npm', args, { cwd: directory, env });
+            assert.deepEqual(lookup(() => ({ status: 0, ...result }), 'github', name, ['name', 'dist-tags']),
+                { name, 'dist-tags': document['dist-tags'] });
+        }
+        assert.throws(() => lookup(() => success([{ latest: '2.0.1' }, { latest: '2.0.2' }]), 'github', name, 'dist-tags'), /Inconsistent/);
+    } finally {
+        await new Promise(resolve => server.close(resolve));
+        rmSync(directory, { recursive: true, force: true });
     }
 });

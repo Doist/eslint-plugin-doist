@@ -82,17 +82,17 @@ export function retainedArtifact(selection, { api = githubApi, archive, unpack =
     assert.equal(metadata.name, '@todoist/eslint-plugin-doist');
     assert.equal(metadata.version, version);
     assert.equal(metadata.filename, filename);
-    return { zip, entries };
+    return { zip, entries, binding: { sourceRunId: runId, sourceArtifactId: artifactId, sourceArchiveDigest: artifact.digest } };
 }
 
 export function withOriginalArtifact(selection, directory, operation, options = {}) {
     const path = join(directory, archiveFilename);
-    const { entries } = retainedArtifact(selection, {
+    const { entries, binding } = retainedArtifact(selection, {
         ...options, archive: existsSync(path) ? readFileSync(path) : options.archive,
     });
     for (const [filename, bytes] of Object.entries(entries)) {
         assert.deepEqual(readFileSync(join(directory, filename)), bytes,
             `Local ${filename} differs from the original archive; publication stopped`);
     }
-    return operation();
+    return operation(binding);
 }
